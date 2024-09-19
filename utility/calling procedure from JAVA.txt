@@ -1,0 +1,55 @@
+String SPsql = "EXEC prc_some_procedure ?";   // for stored proc taking 1 parameter
+
+Connection con = SmartPoolFactory.getConnection(); 
+  
+PreparedStatement ps = con.prepareStatement(SPsql);
+
+ps.setQueryTimeout(<timeout value>);
+
+String someJsonObject = '{"property_1": "this old man", "property_2": "he played one"}'
+
+ps.setString(1, someJsonObject);
+
+ResultSet rs = ps.executeQuery();
+
+
+
+object manager
+simple object manager
+sql helper
+
+patch router
+
+patch sql constants
+
+
+md files for spec git adaptivaspec
+read via vs code
+
+
+
+Jack:
+tables
+general pattern
+	upload tables - client data -- only current state
+	data tables - archiveing from upload
+	entry point of the data
+	U_
+	U2_ -- import ones
+		these are java
+	scheduler invokes procedures -- 
+	
+	C_ count tables -- maintained with scheduler
+	
+	T_ trends
+	
+	the only place where these tables are queried
+	
+	place where mostly used in dashboards
+	
+	
+	
+find sql in easier spot
+
+branch project/windowso-patching
+src/com/adaptiva/patching/dataprovider/sql
