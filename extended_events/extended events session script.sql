@@ -97,6 +97,20 @@ ADD EVENT sqlserver.cursor_unprepare(
 		,sqlserver.username
 	)
 ),
+ADD EVENT sqlserver.database_xml_deadlock_report(
+    ACTION(
+    	package0.collect_system_time
+		,sqlserver.client_app_name
+		,sqlserver.client_hostname
+		,sqlserver.context_info
+		,sqlserver.database_id
+		,sqlserver.database_name
+		,sqlserver.query_hash
+		,sqlserver.session_id
+		,sqlserver.sql_text
+		,sqlserver.username
+	)
+),
 ADD EVENT sqlserver.error_reported(
     ACTION(
 		 package0.collect_system_time
