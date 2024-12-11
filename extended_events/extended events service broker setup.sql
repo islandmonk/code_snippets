@@ -1,3 +1,4 @@
+/*
 IF OBJECT_ID('dbo.extended_events_file') IS NULL
 BEGIN
 	CREATE TABLE [dbo].[extended_events_file] (
@@ -6,7 +7,8 @@ BEGIN
 		, [file_path_and_name] varchar(1000) NOT NULL
 	)
 END
-
+*/
+-- DROP TABLE IF EXISTS [dbo].[extended_event]
 IF OBJECT_ID('dbo.extended_event_values') IS NULL
 BEGIN
 	CREATE TABLE [dbo].[extended_event] (
@@ -16,7 +18,10 @@ BEGIN
 		, [database_id]						bigint
 		, [source_database_id]				bigint
 		, [database_name]					varchar(250)
+		, [username]						varchar(250)
+		, [session_id]						bigint
 		, [duration_micro_s]				bigint
+		, [task_time_micro_s]				bigint
 		, [object_id]						bigint
 		, [object_name]						varchar(max)
 		, [object_type]						varchar(250)
@@ -44,18 +49,30 @@ BEGIN
 		, [activity_id]						varchar(250)
 		, [activity_guid]					as TRY_CAST(LEFT([activity_id], 36) as uniqueidentifier) PERSISTED
 		, [activity_sequence]				as TRY_CAST(REPLACE(REPLACE(SUBSTRING([activity_id], 38, 32), '[', ''), ']', '') as int) PERSISTED
+		, [activity_id_xfer]				varchar(250)
+		, [activity_xfer_guid]				as TRY_CAST(LEFT([activity_id_xfer], 36) as uniqueidentifier) PERSISTED
+		, [activity_xfer_sequence]			as TRY_CAST(REPLACE(REPLACE(SUBSTRING([activity_id_xfer], 38, 32), '[', ''), ']', '') as int) PERSISTED
 	)
 	WITH (DATA_COMPRESSION = Page);
 	
+	CREATE INDEX idx_extended_event__activity_id
+	ON [dbo].[extended_event] ([activity_id])
+	WITH (DATA_COMPRESSION = Page)
+	
 	CREATE INDEX idx_extended_event__activity_guid__activity_sequence
 	ON [dbo].[extended_event] ([activity_guid], [activity_sequence])
+	WITH (DATA_COMPRESSION = Page)
+	
+	CREATE INDEX idx_extended_event__activity_guid_xfer__activity_sequence
+	ON [dbo].[extended_event] ([activity_xfer_guid], [activity_xfer_sequence])
+	WHERE [activity_id_xfer] IS NOT NULL
 	WITH (DATA_COMPRESSION = Page)
 
 	CREATE INDEX idx_extended_event__overall_checksum
 	ON [dbo].[extended_event] ([overall_checksum])
 	WITH (DATA_COMPRESSION = Page)
 
-	CREATE NONCLUSTERED INDEX idx_extended_event__duration_micro_s
+	CREATE INDEX idx_extended_event__duration_micro_s
 	ON [dbo].[extended_event] ([duration_micro_s])
 	INCLUDE ([activity_guid])
 	WITH (DATA_COMPRESSION = Page)
@@ -66,6 +83,8 @@ END
 		-- decent setup tutorial
 		-- https://www.youtube.com/watch?v=kbqcaDDCRbc
 
+-- reset broker and clear out transmission queue
+-- ALTER DATABASE extended_events SET NEW_BROKER WITH ROLLBACK IMMEDIATE
 
 		-- to enable Service Broker on your database
 		ALTER DATABASE [extended_events] SET SINGLE_USER -- WITH ROLLBACK IMMEDIATE
@@ -86,7 +105,8 @@ END
 		-- is Service Broker enabled:
 		SELECT name, service_broker_guid, is_broker_enabled FROM sys.databases where [name] like 'extended%'
 
-
+		-- This setting is necessary for Service Broker to interact with system-level objects and to operate 
+		-- properly in a database where Service Broker is enabled.
 		ALTER DATABASE [extended_events] SET TRUSTWORTHY ON;
 
 		-- first define a message type(s)
@@ -143,7 +163,7 @@ BEGIN
 		  STATUS = ON
 		, execute as owner
 		, PROCEDURE_NAME = dbo.prc_extract_extended_event_from_queue 
-		, MAX_QUEUE_READERS = 10 )
+		, MAX_QUEUE_READERS = 8 )
 
 	*/
 	DECLARE 
@@ -172,7 +192,10 @@ BEGIN
 		, [database_id]			
 		, [source_database_id]	
 		, [database_name]		
+		, [username]		
+		, [session_id]		
 		, [duration_micro_s]	
+		, [task_time_micro_s]	
 		, [object_id]			
 		, [object_name]			
 		, [object_type]			
@@ -193,6 +216,7 @@ BEGIN
 		, [sql_text]			
 		, [statement]			
 		, [activity_id]		
+		, [activity_id_xfer] 
 	)
 	SELECT 
 		  [event_type]				= JSON_VALUE(e.[event], '$.Name')  
@@ -200,7 +224,10 @@ BEGIN
 		, [database_id]				= TRY_CAST(JSON_VALUE(e.[event], '$.database_id') as int)  
 		, [source_database_id]		= TRY_CAST(JSON_VALUE(e.[event], '$.source_database_id') as int)  
 		, [database_name]			= JSON_VALUE(e.[event], '$.database_name')  
+		, [username]				= JSON_VALUE(e.[event], '$.username')  
+		, [session_id]				= TRY_CAST(JSON_VALUE(e.[event], '$.session_id') as int)  
 		, [duration_micro_s]		= TRY_CAST(JSON_VALUE(e.[event], '$.duration') as bigint)  
+		, [task_time_micro_s]		= TRY_CAST(JSON_VALUE(e.[event], '$.task_time') as bigint)  
 		, [object_id]				= TRY_CAST(JSON_VALUE(e.[event], '$.object_id') as int) 
 		, [object_name]				= JSON_VALUE(e.[event], '$.object_name') 
 		, [object_type]				= JSON_VALUE(e.[event], '$.object_type') 
@@ -221,14 +248,17 @@ BEGIN
 		, [sql_text]				= JSON_VALUE(e.[event], '$.sql_text')
 		, [statement]				= JSON_VALUE(e.[event], '$.statement')
 		, [activity_id]				= JSON_VALUE(e.[event], '$.attach_activity_id')
+		, [activity_id_xfer]		= JSON_VALUE(e.[event], '$.attach_activity_id_xfer')
 	FROM (
 		SELECT p.[value] as [event]
 		FROM OPENJSON(@package) as p
-		--WHERE p.[type] = 5
 	) as e
+
+	END CONVERSATION @conversation_handle
 END
 GO
-
+sp_who2
+kill 12
 --SELECT COUNT(*) FROM dbo.initiatorQueue WITH (NOLOCK)
 select top 1000 * 
 , TRY_CAST(REPLACE(REPLACE(SUBSTRING([activity_id], 38, 32), '[', ''), ']', '') as int)
@@ -237,7 +267,8 @@ SELECT COUNT(*) FROM dbo.targetQueue WITH (NOLOCK)
 
 SELECT COUNT(*) FROM [dbo].[extended_event] WITH (NOLOCK)  -- 17,700,906, -- 30,966,375, 129,153,094
 
-
+SELECT TOP 20 CAST(message_body as nvarchar(max))
+from dbo.targetQueue WITH (NOLOCK)
 
 select name as [Queue], x.[service], is_published, is_schema_published, activation_procedure, execute_as_principal_id, is_activation_enabled, is_receive_enabled, is_retention_enabled, is_poison_message_handling_enabled 
 from sys.service_queues as q
@@ -253,14 +284,11 @@ select * from sys.transmission_queue WITH (NOLOCK) ORDER BY enqueue_time DESC
 select * from extended_event_values WITH (NOLOCK)
 --select * from note
 
---truncate table note
---truncate table  extended_event_values
+--truncate table  extended_event
 
 
 EXEC xp_readerrorlog
 
--- reset broker and clear out transmission queue
--- ALTER DATABASE extended_events SET NEW_BROKER WITH ROLLBACK IMMEDIATE
 GO
 CREATE OR ALTER PROCEDURE dbo.prc_enqueue_event_batch 
 	@event_data nvarchar(max)
@@ -343,7 +371,9 @@ AS
 		, ee.timestamp
 		, ee.duration_micro_s 
 		, ee.duration_micro_s / 1000000 as duration_s
-		, ee.row_count
+		, ee.task_time_micro_s
+		, ee.task_time_micro_s / 1000000 as task_time_s
+		, ee.row_count 
 		--, ee.last_row_count
 		, ee.cpu_time
 		, ee.logical_reads
@@ -357,6 +387,7 @@ AS
 		, ee.batch_text
 		, ee.sql_text
 		, ee.statement
+		, ag.activity_guid
 	FROM [dbo].[extended_event] as ee WITH (NOLOCK)
 	INNER JOIN (
 		SELECT 
@@ -381,3 +412,107 @@ AS
 	ORDER BY ag.sequence_no, ee.activity_sequence
 GO
 
+GO
+CREATE OR ALTER PROCEDURE dbo.prc_event_table_indexes 
+	@create bit = 1
+AS
+BEGIN
+	IF @create = 0 
+	BEGIN
+		DROP INDEX idx_extended_event__activity_id
+		ON [dbo].[extended_event];
+	
+		DROP INDEX idx_extended_event__activity_guid__activity_sequence
+		ON [dbo].[extended_event];
+	
+		DROP INDEX idx_extended_event__activity_guid_xfer__activity_sequence
+		ON [dbo].[extended_event];
+
+		DROP INDEX idx_extended_event__overall_checksum
+		ON [dbo].[extended_event];
+
+		DROP INDEX idx_extended_event__duration_micro_s
+		ON [dbo].[extended_event];
+	END
+
+	ELSE
+	BEGIN
+		IF NOT EXISTS (
+			SELECT TOP 1 1
+			FROM sys.indexes as i
+			WHERE [name] = 'idx_extended_event__activity_id'
+		)
+		BEGIN
+			CREATE INDEX idx_extended_event__activity_id
+			ON [dbo].[extended_event] ([activity_id])
+			WITH (DATA_COMPRESSION = Page)
+		END
+	
+		IF NOT EXISTS (
+			SELECT TOP 1 1
+			FROM sys.indexes as i
+			WHERE [name] = 'idx_extended_event__activity_guid__activity_sequence'
+		)
+		BEGIN
+			CREATE INDEX idx_extended_event__activity_guid__activity_sequence
+			ON [dbo].[extended_event] ([activity_guid], [activity_sequence])
+			WITH (DATA_COMPRESSION = Page)
+		END
+	
+		IF NOT EXISTS (
+			SELECT TOP 1 1
+			FROM sys.indexes as i
+			WHERE [name] = 'idx_extended_event__activity_guid_xfer__activity_sequence'
+		)
+		BEGIN
+			CREATE INDEX idx_extended_event__activity_guid_xfer__activity_sequence
+			ON [dbo].[extended_event] ([activity_xfer_guid], [activity_xfer_sequence])
+			WHERE [activity_id_xfer] IS NOT NULL
+			WITH (DATA_COMPRESSION = Page)
+		END
+
+		IF NOT EXISTS (
+			SELECT TOP 1 1
+			FROM sys.indexes as i
+			WHERE [name] = 'idx_extended_event__overall_checksum'
+		)
+		BEGIN
+			CREATE INDEX idx_extended_event__overall_checksum
+			ON [dbo].[extended_event] ([overall_checksum])
+			WITH (DATA_COMPRESSION = Page)
+		END
+
+		IF NOT EXISTS (
+			SELECT TOP 1 1
+			FROM sys.indexes as i
+			WHERE [name] = 'idx_extended_event__duration_micro_s'
+		)
+		BEGIN
+			CREATE INDEX idx_extended_event__duration_micro_s
+			ON [dbo].[extended_event] ([duration_micro_s])
+			INCLUDE ([activity_guid])
+			WITH (DATA_COMPRESSION = Page)
+		END
+	END
+END
+GO
+
+CREATE OR ALTER PROCEDURE dbo.prc_get_queue_and_target_depths
+AS
+BEGIN
+	DECLARE @queue_depth bigint, @target_depth bigint, @target_object_id int;
+
+	SELECT @queue_depth = COUNT(*) FROM dbo.targetQueue WITH (NOLOCK)
+
+	SELECT @target_object_id = OBJECT_ID('dbo.targetQueue');
+
+	-- SELECT @target_depth = COUNT(*) FROM [dbo].[extended_event] WITH (NOLOCK)  
+
+
+	SELECT @target_depth = SUM(ps.[row_count]) 
+	FROM sys.dm_db_partition_stats as ps
+	WHERE index_id IN (0, 1) -- 0 heap, 1 clustered index
+	AND ps.object_id = @target_object_id
+
+	SELECT @queue_depth as queue_depth, @target_depth as target_depth
+END
