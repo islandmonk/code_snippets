@@ -4,15 +4,6 @@ USE deptest
 
 CREATE TABLE person (person_id int identity(1,1) primary key, person_name nvarchar(250) NOT NULL)
 
-CREATE TABLE phone (
-	  phone_id int identity(1,1) primary key
-	, person_id int NOT NULL
-	, phone_number nvarchar(250) NOT NULL
-	, created datetime NOT NULL DEFAULT(getdate())
-	, deleted datetime NULL
-)
-GO
-
 CREATE TABLE house (
 	  house_id int identity(1,1) primary key
 	, street_address nvarchar(1000)
@@ -30,7 +21,7 @@ CREATE TABLE house_person (
 )
 GO
 
-CREATE OR ALTER VIEW dbo.person_house 
+CREATE OR ALTER VIEW dbo.v_person_house 
 AS
 SELECT 
 	  p.person_id
@@ -64,13 +55,13 @@ GO
 
 referencing_object referenced_schema_name referenced_entity_name referenced_object
 ------------------ ---------------------- ---------------------- -----------------
-dbo.person_house   NULL                   house                  dbo.house
-dbo.person_house   dbo                    house_person           dbo.house_person
-dbo.person_house   dbo                    person                 dbo.person
+dbo.v_person_house NULL                   house                  dbo.house
+dbo.v_person_house dbo                    house_person           dbo.house_person
+dbo.v_person_house dbo                    person                 dbo.person
 
 
 */
-ALTER VIEW dbo.person_house 
+CREATE OR ALTER VIEW dbo.v_person_house 
 AS
 SELECT 
 	  p.person_id
@@ -94,9 +85,9 @@ GO
 
 referencing_object referenced_schema_name referenced_entity_name referenced_object
 ------------------ ---------------------- ---------------------- -----------------
-dbo.person_house   dbo                    house                  dbo.house
-dbo.person_house   dbo                    house_person           dbo.house_person
-dbo.person_house   dbo                    person                 dbo.person
+dbo.v_person_house dbo                    house                  dbo.house
+dbo.v_person_house dbo                    house_person           dbo.house_person
+dbo.v_person_house dbo                    person                 dbo.person
 
 */
 
@@ -109,9 +100,9 @@ DROP TABLE dbo.house;
 
 referencing_object referenced_schema_name referenced_entity_name referenced_object
 ------------------ ---------------------- ---------------------- -----------------
-dbo.person_house   dbo                    house                  NULL
-dbo.person_house   dbo                    house_person           dbo.house_person
-dbo.person_house   dbo                    person                 dbo.person
+dbo.v_person_house dbo                    house                  NULL
+dbo.v_person_house dbo                    house_person           dbo.house_person
+dbo.v_person_house dbo                    person                 dbo.person
 
 */
 
