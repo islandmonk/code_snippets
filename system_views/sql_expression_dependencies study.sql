@@ -44,6 +44,7 @@ SELECT
 	, d.referenced_entity_name
 	, SCHEMA_NAME(ro.schema_id) + '.' + ro.name as referenced_object
 	--, d.referenced_class_desc
+	--, d.referenced_id
 FROM sys.sql_expression_dependencies as d
 INNER JOIN sys.objects as o
 	ON d.referencing_id = o.object_id
@@ -51,6 +52,7 @@ LEFT OUTER JOIN sys.objects as ro
 	ON d.referenced_id = ro.object_id
 ORDER BY 1, 4
 GO
+
 /*
 
 referencing_object referenced_schema_name referenced_entity_name referenced_object
@@ -59,8 +61,8 @@ dbo.v_person_house NULL                   house                  dbo.house
 dbo.v_person_house dbo                    house_person           dbo.house_person
 dbo.v_person_house dbo                    person                 dbo.person
 
-
 */
+
 CREATE OR ALTER VIEW dbo.v_person_house 
 AS
 SELECT 
