@@ -1,5 +1,5 @@
 
-ALTER FUNCTION [dbo].[fnt_bigint_binary_list] (@binaryValue varbinary(max))
+CREATE OR ALTER FUNCTION [dbo].[fnt_bigint_binary_list] (@binaryValue varbinary(max))
 RETURNS @IDs TABLE (
 	  bigint_value bigint NOT NULL  -- this is the only field that should matter
 	, binary_value varbinary(8)
@@ -16,14 +16,22 @@ BEGIN
 		, @startSpot int
 		, @length int = 8
 
-	-- big integers are 8 bytes, 16 hex characters
-	-- start from the right of the binary and work left 8 bytes at a time.
-	-- the last number in the array might not be a full 16 char hex.
-	-- Thus the varbinary(8) column instead of a binary(8).
-	-- return distinct non-NULL values only
+	/*
+		big integers are 8 bytes, 16 hex characters
+		start from the right of the binary and work left 8 bytes at a time.
+		the last number in the array might not be a full 16 char hex.
+		Thus the varbinary(8) column instead of a binary(8).
+		return distinct non-NULL values only
 
-	-- example call:
-	-- SELECT * FROM [dbo].[fnt_bigint_binary_list](0xACED0005757200025B4A782004B512B175930200007870000000010000000000003105)
+		Since there are efforts made to return only distinct values, the ord column of the return table
+		isn't very meaningful. I've left it in, however, in case it becomes necessary. If this happens, 
+		the NOT EXISTS portion of the INSERT statement below should be removed.
+	*/
+
+	/*
+		example call:
+		SELECT * FROM [dbo].[fnt_bigint_binary_list](0xACED0005757200025B4A782004B512B175930200007870000000010000000000003105)
+	*/
 
 	WHILE @endSpot > 0
 	BEGIN
