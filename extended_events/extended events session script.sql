@@ -8,7 +8,15 @@ BEGIN
 END
 GO
 
+-- This extended events session definition catches nearly
+-- every activity of the database server. The files that it
+-- creates grow rapidly! This session should only be active
+-- during a trouble-shooting session with care taken to deactivate
+-- the session when trouble shooting is over.
+
+
 -- VERY IMPORTANT: check the [filename] parameter below
+-- (near the bottom)
 -- it is decorated with an important comment
 
 CREATE EVENT SESSION [watch TSQL] ON SERVER 

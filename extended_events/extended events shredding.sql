@@ -359,7 +359,7 @@ SELECT
 	, ee.batch_text
 	, ee.sql_text
 	, ee.statement
-FROM [dbo].[extended_event_values] as ee WITH (NOLOCK)
+FROM [dbo].[extended_event] as ee WITH (NOLOCK)
 INNER JOIN (
 	SELECT 
 		  activity_guid
@@ -371,7 +371,7 @@ INNER JOIN (
 			, max(duration_micro_s) as duration_micro_s
 		FROM (
 			SELECT top 10000 activity_guid, duration_micro_s
-			FROM [dbo].[extended_event_values] WITH (NOLOCK)  -- 300,012,510
+			FROM [dbo].[extended_event] WITH (NOLOCK)  -- 300,012,510
 			--WHERE overall_checksum = -62411432
 			--AND activity_sequence = 1
 			ORDER BY duration_micro_s DESC
@@ -419,6 +419,53 @@ order by b.MACHINE_NAME
 
 */
 
+	SELECT 
+		  activity_guid
+		, duration_micro_s / 1000000 as duration_s
+		, ROW_NUMBER() OVER (ORDER BY duration_micro_s DESC) as sequence_no
+	FROM (
+		SELECT 
+			  activity_guid
+			, max(duration_micro_s) as duration_micro_s
+			, sum(duration_micro_s) as sum_duration_micro_s
+			, min([timestamp]) as [start]
+			, max([timestamp]) as [end]
+		FROM (
+			SELECT top 10000 activity_guid, duration_micro_s
+			FROM [dbo].[extended_event] WITH (NOLOCK)  -- 300,012,510
+			--WHERE overall_checksum = -62411432
+			--AND activity_sequence = 1
+			ORDER BY duration_micro_s DESC
+		) as x
+		GROUP BY x.activity_guid
+	) as y
 
 
+	SELECT 
+		  db.[database_name]
+		, db.activity_guid
+		, db.[message]
+		, x.sum_duration_micro_s as cpu_micro_s
+		, x.[start_time]
+		, x.[end_time]
+		, DATEDIFF(second, x.[start_time], x.[end_time]) as duration_s
+	FROM (
+		SELECT 
+			  activity_guid
+			, sum(duration_micro_s) as sum_duration_micro_s
+			, max(duration_micro_s) as duration_micro_s
+			, min([timestamp]) as [start_time]
+			, max([timestamp]) as [end_time]
+		FROM [dbo].[extended_event] as ee
+		GROUP BY ee.activity_guid
+	) as x	
+	INNER JOIN (
+		SELECT activity_guid, [database_name], COALESCE(sql_text, [statement], [message]) as [message]
+		FROM [dbo].[extended_event] as ee
+		WHERE activity_sequence = 1
+	) as db
+		ON x.activity_guid = db.activity_guid
+	ORDER BY x.sum_duration_micro_s DESC
 
+
+	(@P0 int,@P1 int,@P2 int,@P3 nvarchar(4000),@P4 nvarchar(4000),@P5 nvarchar(4000),@P6 nvarchar(4000),@P7 datetime,@P8 nvarchar(4000),@P9 nvarchar(4000),@P10 datetime,@P11 nvarchar(4000),@P12 datetime,@P13 nvarchar(4000),@P14 nvarchar(4000),@P15 nvarchar(4000),@P16 nvarchar(4000))EXEC EPH_SP_UPLOAD_ALL_RESULTS @P0 ,  @P1 ,  @P2 ,  @P3 ,  @P4 ,  @P5 ,  @P6 ,  @P7 ,  @P8 ,  @P9 ,  @P10 ,  @P11 ,  @P12 ,  @P13 ,  @P14 ,  @P15 ,  @P16 , ',', ':'
