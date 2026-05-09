@@ -13,7 +13,7 @@ DECLARE @tree table(
 	, rgt					int
 	, count_children		int
 	, count_descendants		int
-	, bread_crumb_trail		varchar(60) 
+	, bread_crumb_trail		varchar(max) 
 )
 
 DECLARE @x table ( -- scratch table for nested set calcs
