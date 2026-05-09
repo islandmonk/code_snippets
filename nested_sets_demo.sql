@@ -1,7 +1,7 @@
 -- Consider using nested sets. This gets a bit involved, but is 
 -- crazy powerful. Tool up your table for nested sets with integer columns named
 -- left and right. I abbreviate a bit so it's clear that references to them are
--- not in fact parts of join predicates.
+-- not, in fact, parts of join predicates.
 
 DECLARE @tree table(
 	  id					int PRIMARY KEY
