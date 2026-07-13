@@ -6,84 +6,71 @@ CREATE OR ALTER FUNCTION [dbo].[fnt_two_column_int_csv]
 )
 RETURNS @output TABLE
 (
-	  [value1] BIGINT NULL
-	, [value2] BIGINT NULL
-	, [ord] INT IDENTITY(1,1) PRIMARY KEY
+	  [ord] int NOT NULL PRIMARY KEY
+	, [value1] int NULL
+	, [value2] int NULL
 )
 BEGIN
-	DECLARE
-		  @start INT
-		, @end INT
-		, @strRowValue VARCHAR(MAX)
-		, @lenStrRowValue INT
-		, @strValue1 VARCHAR(MAX)
-		, @strValue2 VARCHAR(MAX)
-		, @intValue1 BIGINT
-		, @intValue2 BIGINT
-		, @like_column_delimiter CHAR(3)
-		, @column_spot_1 INT
-		, @row_spot INT;
+/*
+	IMPORTANT:
+	This function has dependencies on: 
+		[dbo].[fnt_one_column_varchar_csv]
+		and
+		[dbo].[fnt_one_column_int_csv]
 
-	SELECT
-		  @start = 1
-		, @end = CHARINDEX(@row_delimiter, @string)
-		, @like_column_delimiter = '%' + @column_delimiter + '%';
 
-	WHILE @start < LEN(@string) + 1
-	BEGIN
-		IF @end = 0
-		BEGIN
-			SET @end = LEN(@string) + 1;
-		END
+	the csv *needs* to look like this:
+	456,345;12,3456;9878,234
+	in the above example, the row delimiter is the semi-colon
+	and the column delimiter is the comma.
 
-		SELECT @strRowValue =
-			CASE
-				WHEN @end > @start THEN SUBSTRING(@string, @start, @end - @start)
-				ELSE ''
-			END;
+	The selection of delimiters is arbitrary--they just cannot
+	be the same thing.
 
-		-- @strValue is now ONE ROW
-		-- it now needs to be split into columns
+	The above example would be executed like this:
 
-		IF @strRowValue LIKE @like_column_delimiter
-		BEGIN
-			SELECT
-				  @column_spot_1 = CHARINDEX(@column_delimiter, @strRowValue)
-				, @strValue1 =
-					CASE
-						WHEN @column_spot_1 > 0 
-						THEN LEFT(@strRowValue, @column_spot_1 - 1)
-						ELSE ''
-					END
-				, @strValue2 =
-					CASE
-						WHEN @column_spot_1 > 0 
-						THEN SUBSTRING(@strRowValue, @column_spot_1 + 1, LEN(@strRowValue))
-						ELSE ''
-					END
-		END
-		
-		ELSE 
-		BEGIN
-			SELECT 
-				  @strValue1 = @strRowValue
-				, @strValue2 = NULL;
-		END
-		
+	SELECT *
+	FROM dbo.fnt_two_column_int_csv ('456,345;12,3456;9878,234', ',', ';')
+
+*/
+
+	-- split it into rows:
+	DECLARE @rows TABLE (
+		  [theRow] nvarchar(max) NULL
+		, [ord] int not null
+	)
+
+	INSERT @rows ([theRow], [ord])
+	SELECT [value], [ord]
+	FROM [dbo].[fnt_one_column_varchar_csv](@string, ';')
+
+	-- split the rows into columns
+	;WITH cols as (
 		SELECT 
-			  @intValue1 = CASE WHEN ISNUMERIC(@strValue1) = 1 THEN @strValue1 ELSE NULL END
-			, @intValue2 = CASE WHEN ISNUMERIC(@strValue2) = 1 THEN @strValue2 ELSE NULL END
-			
+			  r.[ord] as row_ord
+			, c.[value]
+			, c.[ord] as column_ord
+		FROM @rows as r
+		CROSS APPLY (
+			SELECT x.[value], x.[ord]
+			FROM dbo.fnt_one_column_int_csv(r.[theRow], @column_delimiter) as x
+		) as c
+	)
+	INSERT @output ([value1], [value2], [ord])
+	SELECT [1], [2], [row_ord]
+	FROM (
+		SELECT 
+			  [row_ord]
+			, [value]
+			, [column_ord]
+		FROM cols
+	) as c
+	PIVOT (
+		MAX([value])  
+		FOR column_ord in ([1], [2])
+	) as pt
 
-		INSERT INTO @output ([value1], [value2])
-		VALUES(@intValue1, @intValue2);
-
-		SELECT
-			  @start = @end + 1
-			, @end = CHARINDEX(@row_delimiter, @string, @start);
-	END
-
-RETURN;
+	RETURN;
 END
 
 GO

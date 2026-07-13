@@ -6,10 +6,10 @@ CREATE OR ALTER FUNCTION [dbo].[fnt_three_column_int_csv]
 )
 RETURNS @output TABLE
 (
-	  [value1] int NULL
+	  [ord] int NOT NULL PRIMARY KEY
+	, [value1] int NULL
 	, [value2] int NULL
 	, [value3] int NULL
-	, [ord] int NOT NULL
 )
 BEGIN
     DECLARE @json_values nvarchar(max)
@@ -124,10 +124,9 @@ BEGIN
 	PIVOT (
 		MAX([value])  
 		FOR column_ord in ([1], [2], [3])
-	) as pt
+	) as pt;
 
-
-RETURN;
+	RETURN;
 END
 GO
 
