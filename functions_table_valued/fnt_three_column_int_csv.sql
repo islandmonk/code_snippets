@@ -6,29 +6,25 @@ CREATE OR ALTER FUNCTION [dbo].[fnt_three_column_int_csv]
 )
 RETURNS @output TABLE
 (
-	  [value1] int
-	, [value2] int
-	, [value3] int
+	  [value1] int NULL
+	, [value2] int NULL
+	, [value3] int NULL
+	, [ord] int NOT NULL
 )
 BEGIN
-	DECLARE
-		  @start int
-		, @end int
-		, @value1 int
-		, @value2 int
-		, @value3 int
-		, @strRowValue varchar(max)
-		, @lenStrRowValue int
-		, @strValue1 varchar(max)
-		, @strValue2 varchar(max)
-		, @strValue3 varchar(max)
-		, @like_column_delimiter char(3)
-		, @column_spot_1 int
-		, @column_spot_2 int
-		, @row_spot int;
+    DECLARE @json_values nvarchar(max)
+    
+	SELECT @json_values = '["' + REPLACE(@string, @row_delimiter, '","') + '"]' 
 
 /*
-	the csv needs to look like this:
+	IMPORTANT:
+	This function has dependencies on: 
+		[dbo].[fnt_one_column_varchar_csv]
+		and
+		[dbo].[fnt_one_column_int_csv]
+
+
+	the csv *needs* to look like this:
 	456,345;12,3456;9878,234
 	in the above example, the row delimiter is the semi-colon
 	and the column delimiter is the comma.
@@ -94,80 +90,44 @@ BEGIN
 	-- end of consuming sproc
 */
 
+	-- split it into rows:
+	DECLARE @rows TABLE (
+		  [theRow] nvarchar(max) NULL
+		, [ord] int not null
+	)
 
+	INSERT @rows ([theRow], [ord])
+	SELECT [value], [ord]
+	FROM [dbo].[fnt_one_column_varchar_csv](@string, ';')
 
-	SELECT
-		  @start = 1
-		, @end = CHARINDEX(@row_delimiter, @string)
-		, @like_column_delimiter = '%' + @column_delimiter + '%';
+	-- split the rows into columns
+	;WITH cols as (
+		SELECT 
+			  r.[ord] as row_ord
+			, c.[value]
+			, c.[ord] as column_ord
+		FROM @rows as r
+		CROSS APPLY (
+			SELECT x.[value], x.[ord]
+			FROM dbo.fnt_one_column_int_csv(r.[theRow], @column_delimiter) as x
+		) as c
+	)
+	INSERT @output ([value1], [value2], [value3], [ord])
+	SELECT [1], [2], [3], [row_ord]
+	FROM (
+		SELECT 
+			  [row_ord]
+			, [value]
+			, [column_ord]
+		FROM cols
+	) as c
+	PIVOT (
+		MAX([value])  
+		FOR column_ord in ([1], [2], [3])
+	) as pt
 
-	WHILE @start < LEN(@string) + 1
-	BEGIN
-		IF @end = 0
-		BEGIN
-			SET @end = LEN(@string) + 1;
-		END
-
-		SELECT @strRowValue =
-			CASE
-				WHEN @end > @start THEN SUBSTRING(@string, @start, @end - @start)
-				ELSE ''
-			END;
-
-		-- @strValue is now ONE ROW
-		-- it now needs to be split into columns
-
-		IF @strRowValue LIKE @like_column_delimiter
-		BEGIN
-			SELECT
-				  @column_spot_1 = CHARINDEX(@column_delimiter, @strRowValue)
-				, @column_spot_2 = CHARINDEX(@column_delimiter, @strRowValue, @column_spot_1 + 1)
-				, @strValue1 =
-					CASE
-						WHEN @column_spot_1 > 0 AND @column_spot_1 < @column_spot_2
-						THEN LEFT(@strRowValue, @column_spot_1 - 1)
-						ELSE ''
-					END
-				, @strValue2 =
-					CASE
-						WHEN @column_spot_1 > 0 AND @column_spot_1 < @column_spot_2
-						THEN SUBSTRING(@strRowValue, @column_spot_1 + 1, @column_spot_2 - @column_spot_1 - 1)
-						ELSE ''
-					END
-
-				, @strValue3 =
-					CASE
-						WHEN @column_spot_1 > 0 AND @column_spot_1 < @column_spot_2 AND @column_spot_2 < LEN(@strRowValue)
-						THEN SUBSTRING(@strRowValue, @column_spot_2 + 1, LEN(@strRowValue))
-						ELSE ''
-					END
-
-				, @strValue1 = REPLACE(@strValue1, ',', 'x')
-				, @strValue2 = REPLACE(@strValue2, ',', 'x')
-				, @strValue3 = REPLACE(@strValue3, ',', 'x');
-
-
-			IF ISNUMERIC(@strValue1) = 1
-			AND ISNUMERIC(@strValue2) = 1
-			AND ISNUMERIC(@strValue3) = 1
-			BEGIN
-				SELECT
-					  @value1 = CONVERT(int, CONVERT(float, @strValue1))
-					, @value2 = CONVERT(int, CONVERT(float, @strValue2))
-					, @value3 = CONVERT(int, CONVERT(float, @strValue3));
-					
-				INSERT INTO @output ([value1], [value2], [value3])
-				VALUES(@value1, @value2, @value3);
-			END
-		END
-
-		SELECT
-			  @start = @end + 1
-			, @end = CHARINDEX(@row_delimiter, @string, @start);
-	END
 
 RETURN;
 END
 GO
-
 
